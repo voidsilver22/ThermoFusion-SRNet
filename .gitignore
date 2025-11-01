@@ -1,0 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+
+# Logs and outputs
+*.log
+*.out
+*.err
+logs/
+wandb/
+runs/
+
+# Data files
+processed_data/
+data/
+*.tif
+*.png
+*.jpg
+*.csv
+
+# Model checkpoints
+checkpoints/
+*.pth
+*.pt
+*.h5
+*.ckpt
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Configs or credentials
+config.yaml
+*.env

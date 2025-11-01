@@ -1,0 +1,19 @@
+# Core Deep Learning Framework
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=0.15.0
+# Geospatial Deep Learning Utility
+torchgeo>=0.6.0
+
+# Geospatial Data Handling (Standard, actively maintained)
+gdal>=3.4.0  
+rasterio>=1.3.0
+
+# Scientific Computing & Array Manipulation
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.0.0
+
+# Computer Vision & Image Processing (For Geometric Alignment)
+scikit-image>=0.21.0
+opencv-python>=4.7.0
