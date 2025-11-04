@@ -22,7 +22,7 @@ TIRS_B10_BAND_IDX = 10
 # TIRS_B11_BAND_IDX = 11 # Add if using split-window
 
 # --- Data Directories ---
-ROOT_DIR = "C:/Users/swast/OneDrive/Desktop/Case Study ML/data" # Point to your data dir
+ROOT_DIR = "C:/Users/swast/OneDrive/Desktop/THERMOFUSION-SRNET/data" # Point to your data dir
 OUTPUT_DIR = "processed_data"
 
 # --- Helper Functions (Updated) ---
@@ -109,15 +109,15 @@ def process_all_files():
     search_path = os.path.join(ROOT_DIR, "*/all_bands.tif")
     tif_files = sorted(glob.glob(search_path))
     
-    # --- NEW: Limit processing to the first 500 files ---
-    tif_files = tif_files[:500]
+    # --- NEW: Limit processing to the first 3500 files ---
+    tif_files = tif_files[:3500]
     # ----------------------------------------------------
     
     if not tif_files:
         print(f"Error: No files found at '{search_path}'. Check ROOT_DIR.")
         return
 
-    print(f"Found {len(tif_files)} files to process (limited to 500).")
+    print(f"Found {len(tif_files)} files to process (limited to 3500).")
 
     for tif_path in tqdm(tif_files, desc="Preprocessing Scenes"):
         try:
@@ -181,7 +181,6 @@ def process_all_files():
             print(f"Failed to process {tif_path}: {e}")
             
     print("Preprocessing complete.")
-    # TODO: Calculate and save normalization stats (mean/std)
 
 if __name__ == "__main__":
     process_all_files()

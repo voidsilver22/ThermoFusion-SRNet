@@ -3,7 +3,7 @@ import os
 import glob
 from tqdm import tqdm
 
-def calculate_normalization_stats(processed_dir="processed_data"):
+def calculate_normalization_stats(processed_dir=os.path.join("..", "preprocessing", "processed_data", "train")):
     """
     Calculates the mean and standard deviation for all processed .npy files.
     This uses a running "sum" and "sum of squares" to avoid loading all

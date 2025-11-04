@@ -8,6 +8,7 @@ import cv2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from scipy import signal, ndimage # <-- ADDED for PSD and Gradients
 
 # --- Import our custom modules ---
 from model import CSRN
@@ -22,6 +23,9 @@ DATA_ROOT = os.path.join(PROJECT_ROOT, "preprocessing", "data")
 SAMPLE_TIF_PATH = os.path.join(PROJECT_ROOT, "preprocessing", "data", "0007999", "all_bands.tif") # Your test scene
 OUTPUT_IMAGE_PATH = os.path.join(MODEL_DIR, "inference_output_30m.tif")
 OUTPUT_PLOT_PATH = os.path.join(MODEL_DIR, "inference_comparison.png")
+OUTPUT_DIAG_PATH = os.path.join(MODEL_DIR, "inference_diagnostics.png")
+OUTPUT_PSD_PATH = os.path.join(MODEL_DIR, "inference_psd_analysis.png") # <-- NEW
+OUTPUT_GRAD_PATH = os.path.join(MODEL_DIR, "inference_gradient_analysis.png") # <-- NEW
 
 # ---
 # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -52,17 +56,14 @@ OLI_PAN_BAND_IDX = 8
 TIRS_B10_BAND_IDX = 10
 
 # --- Patch size (must match training) ---
-STRIDE_HR = 72  # This is our actual patch size
+STRIDE_HR = 72
 STRIDE_LR = STRIDE_HR // 3
-
-# --- Define overlap (padding) ---
 PAD_HR = 8
 PAD_LR = (PAD_HR + 2) // 3
 PATCH_SIZE_LR = STRIDE_LR + 2 * PAD_LR
 PATCH_SIZE_HR = STRIDE_HR + 2 * PAD_HR
 
-
-# --- Helper Functions (No changes) ---
+# --- Helper Functions (No changes, except save_as_geotiff) ---
 def get_band_data(gdal_dataset, band_index):
     band = gdal_dataset.GetRasterBand(band_index)
     return band.ReadAsArray()
@@ -122,8 +123,28 @@ def save_as_geotiff(array, original_gdal_ds, output_path, crop_shape):
     out_band.FlushCache()
     out_ds = None
     print("GeoTIFF saved.")
-# --- End of Helper Functions ---
 
+# ---
+# --- NEW HELPER FUNCTIONS FOR PLOTTING ---
+# ---
+
+def get_psd(image):
+    """Calculates the 1D Power Spectral Density (PSD) from a 2D image."""
+    # Use Welch's method on each row, then average
+    freqs, psd_rows = signal.welch(image, axis=1)
+    psd_mean = np.mean(psd_rows, axis=0)
+    return freqs, psd_mean
+
+def get_gradient(image):
+    """Calculates the gradient magnitude (edges) using a Sobel filter."""
+    grad_x = ndimage.sobel(image, axis=0)
+    grad_y = ndimage.sobel(image, axis=1)
+    gradient = np.sqrt(grad_x**2 + grad_y**2)
+    return gradient
+
+# ---
+# --- End of Helper Functions ---
+# ---
 
 def main():
     # --- 1. Setup ---
@@ -165,7 +186,7 @@ def main():
     
     h_crop, w_crop = h_lr_orig * 3, w_lr_orig * 3
     
-    lst_30m_target = lst_30m_target_full[:h_crop, :w_crop]
+    lst_30m_target = lst_30m_target_full[:h_crop, :w_crop] # This is our hr_target_np
     oli_30m = oli_30m[:, :h_crop, :w_crop]
     epsilon_30m = epsilon_30m[:h_crop, :w_crop]
 
@@ -182,63 +203,41 @@ def main():
     
     guide_norm = np.concatenate([oli_norm, np.expand_dims(eps_norm, axis=0)], axis=0)
     
-    # ---
-    # --- MODIFICATION: Get shapes *before* padding ---
-    # ---
     lr_lst_tensor_unpadded = torch.from_numpy(lr_lst_norm).unsqueeze(0).unsqueeze(0)
     hr_guide_tensor_unpadded = torch.from_numpy(guide_norm).unsqueeze(0)
     hr_target_tensor = torch.from_numpy(lst_30m_target).unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float32)
 
-    # Get unpadded shapes
     B, C_lr, H_lr, W_lr = lr_lst_tensor_unpadded.shape
     _, C_hr, H_hr, W_hr = hr_guide_tensor_unpadded.shape
-    # --- End Modification ---
 
-    # --- Add padding to the *full* tensors for edge handling ---
     lr_lst_tensor = F.pad(lr_lst_tensor_unpadded, (PAD_LR, PAD_LR, PAD_LR, PAD_LR), mode='reflect').to(device, dtype=torch.float32)
     hr_guide_tensor = F.pad(hr_guide_tensor_unpadded, (PAD_HR, PAD_HR, PAD_HR, PAD_HR), mode='reflect').to(device, dtype=torch.float32)
 
-    # --- 
     # --- 6. Run Tiled Inference (with Overlap) ---
-    # ---
     print("Running tiled model inference (with overlap)...")
-
-    # Create an empty tensor to store the *unpadded* output
-    # This line will now work, as B, H_hr, and W_hr are defined
     pred_hr_norm = torch.zeros(B, 1, H_hr, W_hr).to(device)
 
-    # Loop over the *original* LR dimensions using STRIDE_LR
     for h_start_lr in tqdm(range(0, H_lr, STRIDE_LR), desc="Inference Tiles"):
         for w_start_lr in range(0, W_lr, STRIDE_LR):
             
-            # Calculate LR patch coordinates *in the padded tensor*
             h_in_lr = h_start_lr
             w_in_lr = w_start_lr
-            
             lr_patch = lr_lst_tensor[:, :, h_in_lr : h_in_lr + PATCH_SIZE_LR, 
                                           w_in_lr : w_in_lr + PATCH_SIZE_LR]
             
-            # Calculate HR patch coordinates *in the padded tensor*
             h_in_hr = h_start_lr * 3
             w_in_hr = w_start_lr * 3
-            
             hr_patch = hr_guide_tensor[:, :, h_in_hr : h_in_hr + PATCH_SIZE_HR, 
                                             w_in_hr : w_in_hr + PATCH_SIZE_HR]
 
-            # --- Run Inference ---
             with torch.no_grad():
-                pred_patch_norm_padded = model(lr_patch, hr_patch) # [1, 1, 88, 88]
+                pred_patch_norm_padded = model(lr_patch, hr_patch)
             
-            # --- Get the "good" central part (discarding PAD_HR) ---
-            pred_patch_center = pred_patch_norm_padded[:, :, 
-                                                PAD_HR : -PAD_HR, 
-                                                PAD_HR : -PAD_HR] # [1, 1, 72, 72]
+            pred_patch_center = pred_patch_norm_padded[:, :, PAD_HR : -PAD_HR, PAD_HR : -PAD_HR]
             
-            # --- Place the result back (in the unpadded output tensor) ---
             h_out_hr = h_start_lr * 3
             w_out_hr = w_start_lr * 3
 
-            # Handle edge cases where the patch is smaller than the stride
             h_end_hr = min(h_out_hr + STRIDE_HR, H_hr)
             w_end_hr = min(w_out_hr + STRIDE_HR, W_hr)
             
@@ -246,16 +245,13 @@ def main():
                                 w_out_hr : w_end_hr] = pred_patch_center[:, :, :h_end_hr - h_out_hr, :w_end_hr - w_out_hr]
 
     print("Inference complete.")
-    # --- End of Step 6 ---
-
 
     # --- 7. Post-processing (De-normalization) ---
     pred_hr_kelvin = (pred_hr_norm * LST_STD) + LST_MEAN
     
     pred_hr_np = pred_hr_kelvin.squeeze().cpu().numpy()
     hr_target_np = lst_30m_target
-    # De-pad the LR tensor for plotting
-    lr_input_np = (lr_lst_tensor[:, :, PAD_LR:-PAD_LR, PAD_LR:-PAD_LR] * LST_STD + LST_MEAN).squeeze().cpu().numpy()
+    lr_input_np = (lr_lst_tensor_unpadded * LST_STD + LST_MEAN).squeeze().cpu().numpy()
 
     # --- 8. Calculate Metrics ---
     print("--- Quantitative Metrics ---")
@@ -279,35 +275,139 @@ def main():
     # --- 9. Save GeoTIFF Output ---
     save_as_geotiff(pred_hr_np, gdal_ds, OUTPUT_IMAGE_PATH, (h_crop, w_crop))
     
-    # --- 10. Save Comparison Plot ---
+    # --- 10. Save Comparison Plot (2x2) ---
     print(f"Saving comparison plot to {OUTPUT_PLOT_PATH}...")
     
     lr_input_upscaled = cv2.resize(
-        lr_input_np, 
-        (w_crop, h_crop), 
-        interpolation=cv2.INTER_NEAREST
+        lr_input_np, (w_crop, h_crop), interpolation=cv2.INTER_NEAREST
     )
     
-    fig, axes = plt.subplots(1, 3, figsize=(24, 8), layout="constrained")
+    fig, axes = plt.subplots(2, 2, figsize=(20, 18), layout="constrained")
+    fig.suptitle(f"Inference on Scene: {os.path.basename(os.path.dirname(SAMPLE_TIF_PATH))}", fontsize=20)
     
-    valid_temps = hr_target_np[hr_target_np > 150]
-    vmin = np.percentile(valid_temps, 5) 
-    vmax = np.percentile(valid_temps, 95)
+    valid_mask = hr_target_np > 150
+    if valid_mask.any():
+        vmin = np.percentile(hr_target_np[valid_mask], 5) 
+        vmax = np.percentile(hr_target_np[valid_mask], 95)
+    else: vmin, vmax = 273, 330
     
-    axes[0].imshow(lr_input_upscaled, cmap='hot', vmin=vmin, vmax=vmax)
-    axes[0].set_title(f"Input LST (100m, Nearest Neighbor)")
+    axes[0, 0].imshow(lr_input_upscaled, cmap='hot', vmin=vmin, vmax=vmax)
+    axes[0, 0].set_title(f"Input LST (100m, Nearest Neighbor)")
     
-    im = axes[1].imshow(pred_hr_np, cmap='hot', vmin=vmin, vmax=vmax)
-    axes[1].set_title(f"Predicted LST (30m) - RMSE: {rmse:.4f} K")
+    axes[0, 1].imshow(hr_target_np, cmap='hot', vmin=vmin, vmax=vmax)
+    axes[0, 1].set_title(f"Ground Truth LST (30m)")
     
-    axes[2].imshow(hr_target_np, cmap='hot', vmin=vmin, vmax=vmax)
-    axes[2].set_title(f"Ground Truth LST (30m)")
+    im_hot = axes[1, 0].imshow(pred_hr_np, cmap='hot', vmin=vmin, vmax=vmax)
+    axes[1, 0].set_title(f"Predicted LST (30m) - RMSE: {rmse:.4f} K")
+    fig.colorbar(im_hot, ax=axes[0, :].ravel().tolist() + [axes[1,0]], shrink=0.8, label="Temperature (K)")
     
-    fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.7, label="Temperature (K)")
-    fig.suptitle(f"Inference on Scene: {os.path.basename(os.path.dirname(SAMPLE_TIF_PATH))}", fontsize=16)
+    error_map = pred_hr_np - hr_target_np
+    if valid_mask.any():
+        v_err = np.percentile(np.abs(error_map[valid_mask]), 98)
+    else: v_err = 5.0
+        
+    im_err = axes[1, 1].imshow(error_map, cmap='RdBu_r', vmin=-v_err, vmax=v_err)
+    axes[1, 1].set_title(f"Error Map (Residuals)")
+    fig.colorbar(im_err, ax=axes[1, 1], shrink=1.0, label="Error (K)")
         
     plt.savefig(OUTPUT_PLOT_PATH)
-    print("Plot saved.")
+    print("Comparison plot saved.")
+
+    # --- 11. Save Diagnostic Plots ---
+    print(f"Saving diagnostic plot to {OUTPUT_DIAG_PATH}...")
+    fig_diag, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8), layout="constrained")
+    fig_diag.suptitle(f"Diagnostic Plots for Scene: {os.path.basename(os.path.dirname(SAMPLE_TIF_PATH))}", fontsize=16)
+
+    errors_flat = error_map.flatten()
+    target_flat = hr_target_np.flatten()
+    valid_errors = errors_flat[target_flat > 150]
+    mean_error = np.mean(valid_errors)
+    std_error = np.std(valid_errors)
+    
+    ax1.hist(valid_errors, bins=100, range=(-5, 5))
+    ax1.axvline(mean_error, color='red', linestyle='--', linewidth=2, label=f'Mean Error: {mean_error:.3f} K')
+    ax1.set_title(f"Error Histogram (StdDev: {std_error:.3f} K)")
+    ax1.set_xlabel("Error (K)")
+    ax1.set_ylabel("Pixel Count")
+    ax1.legend()
+
+    pred_flat = pred_hr_np.flatten()
+    valid_pred = pred_flat[target_flat > 150]
+    valid_truth = target_flat[target_flat > 150]
+    
+    if len(valid_truth) > 50000:
+        sample_indices = np.random.choice(len(valid_truth), 50000, replace=False)
+        valid_truth = valid_truth[sample_indices]
+        valid_pred = valid_pred[sample_indices]
+
+    hb = ax2.hexbin(valid_truth, valid_pred, gridsize=100, cmap='inferno', mincnt=1)
+    fig_diag.colorbar(hb, ax=ax2, label='Pixel Density')
+    
+    lim_min = min(np.min(valid_truth), np.min(valid_pred))
+    lim_max = max(np.max(valid_truth), np.max(valid_pred))
+    ax2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--', label='1:1 Line')
+    
+    ax2.set_title("Predicted vs. Ground Truth")
+    ax2.set_xlabel("Ground Truth (K)")
+    ax2.set_ylabel("Predicted (K)")
+    ax2.legend()
+    ax2.set_aspect('equal', 'box')
+
+    plt.savefig(OUTPUT_DIAG_PATH)
+    print("Diagnostic plot saved.")
+
+    # --- 
+    # --- 12. Save PSD Plot (NEW) ---
+    # --- 
+    print(f"Saving PSD analysis plot to {OUTPUT_PSD_PATH}...")
+    
+    # Get PSD for all three images
+    freq_gt, psd_gt = get_psd(hr_target_np)
+    freq_pred, psd_pred = get_psd(pred_hr_np)
+    freq_in, psd_in = get_psd(lr_input_upscaled)
+    
+    plt.figure(figsize=(12, 8))
+    plt.loglog(freq_gt, psd_gt, label='Ground Truth (30m)')
+    plt.loglog(freq_pred, psd_pred, label='Predicted (30m)')
+    plt.loglog(freq_in, psd_in, label='Input (100m NN)')
+    plt.title('Power Spectral Density (PSD) Analysis')
+    plt.xlabel('Spatial Frequency (log)')
+    plt.ylabel('Power (log)')
+    plt.legend()
+    plt.savefig(OUTPUT_PSD_PATH)
+    print("PSD plot saved.")
+    
+    # --- 
+    # --- 13. Save Gradient Plot (NEW) ---
+    # --- 
+    print(f"Saving gradient analysis plot to {OUTPUT_GRAD_PATH}...")
+
+    grad_gt = get_gradient(hr_target_np)
+    grad_pred = get_gradient(pred_hr_np)
+    grad_error = grad_pred - grad_gt
+    
+    grad_rmse = np.sqrt(np.mean(grad_error**2))
+    print(f"Gradient RMSE: {grad_rmse:.4f}")
+
+    fig_grad, (axg1, axg2, axg3) = plt.subplots(1, 3, figsize=(24, 8), layout="constrained")
+    fig_grad.suptitle(f"Gradient (Edge) Analysis - Gradient RMSE: {grad_rmse:.4f}", fontsize=16)
+    
+    g_vmax = np.percentile(grad_gt, 98) # Use 98th percentile for plotting
+    
+    axg1.imshow(grad_gt, cmap='hot', vmin=0, vmax=g_vmax)
+    axg1.set_title("Ground Truth Gradient")
+    
+    axg2.imshow(grad_pred, cmap='hot', vmin=0, vmax=g_vmax)
+    axg2.set_title("Predicted Gradient")
+    
+    g_err_vmax = np.percentile(np.abs(grad_error), 98)
+    im_gerr = axg3.imshow(grad_error, cmap='RdBu_r', vmin=-g_err_vmax, vmax=g_err_vmax)
+    axg3.set_title("Gradient Error Map")
+    fig_grad.colorbar(im_gerr, ax=axg3, shrink=0.8, label="Gradient Error")
+    
+    plt.savefig(OUTPUT_GRAD_PATH)
+    print("Gradient plot saved.")
+    
     print("\n--- Inference Complete ---")
 
 if __name__ == "__main__":

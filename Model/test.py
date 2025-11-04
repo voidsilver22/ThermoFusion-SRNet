@@ -18,22 +18,25 @@ PROJECT_ROOT = os.path.dirname(MODEL_DIR)
 
 # --- 2. Configuration ---
 MODEL_PATH = os.path.join(MODEL_DIR, "checkpoints", "best_model.pth")
-DATA_ROOT = os.path.join(PROJECT_ROOT, "preprocessing", "data")
+DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
 OUTPUT_DIR = os.path.join(MODEL_DIR, "test_results")
 
-TEST_SCENE_START = 500
-TEST_SCENE_END = 599  # (inclusive)
+TEST_SCENE_START = 4000
+TEST_SCENE_END = 4699  # (inclusive)
 
 # ---
 # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 #  CRITICAL: Make sure these are your correct stats from calculate_stats.py
 # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-LST_MEAN = 342.4161
-LST_STD = 14.0398
-OLI_MEAN = np.array([0.3258, 0.2833, 0.2652, 0.2462, 0.7328, 0.5324, 0.3284], dtype=np.float32)
-OLI_STD = np.array([0.1087, 0.1198, 0.1335, 0.1744, 0.2096, 0.2286, 0.2205], dtype=np.float32)
-EPS_MEAN = 0.9830
-EPS_STD = 0.0087
+LST_MEAN = 343.7189
+LST_STD = 14.3151
+
+
+OLI_MEAN = np.array([0.3277, 0.2869, 0.2712, 0.2586, 0.7287, 0.5524, 0.3482], dtype=np.float32)
+OLI_STD = np.array([0.1012, 0.113 , 0.1294, 0.175 , 0.2042, 0.2299, 0.2261], dtype=np.float32)
+
+EPS_MEAN = 0.9823
+EPS_STD = 0.0090
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # ---

@@ -134,9 +134,11 @@ class CSRN(nn.Module):
         guidance = self.fusion(feat_tir, feat_opt) # [B, 128, H, W]
         
         # 3. Upsample TIR features
+        # 3. Upsample TIR features
+        # --- FIX: Interpolate to the *exact* size of the guidance tensor ---
         feat_tir_up = F.interpolate(
             feat_tir,
-            scale_factor=3,
+            size=guidance.shape[2:],  # Use guidance shape (88, 88)
             mode='bilinear',
             align_corners=False
         ) # [B, 128, H, W]
