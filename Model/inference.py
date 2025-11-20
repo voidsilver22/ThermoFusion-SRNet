@@ -8,8 +8,11 @@ import cv2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+import sys
 
 # --- Import our custom modules ---
+# Add current directory to sys.path to ensure model can be imported
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from model import CSRN
 
 # --- 1. Dynamic Path Handling ---
@@ -62,7 +65,7 @@ PATCH_SIZE_LR = STRIDE_LR + 2 * PAD_LR
 PATCH_SIZE_HR = STRIDE_HR + 2 * PAD_HR
 
 
-# --- Helper Functions (No changes) ---
+# --- Helper Functions ---
 def get_band_data(gdal_dataset, band_index):
     band = gdal_dataset.GetRasterBand(band_index)
     return band.ReadAsArray()
@@ -122,10 +125,36 @@ def save_as_geotiff(array, original_gdal_ds, output_path, crop_shape):
     out_band.FlushCache()
     out_ds = None
     print("GeoTIFF saved.")
+
+def save_rgb_preview(gdal_ds, output_path):
+    """Extracts RGB bands (4, 3, 2), normalizes, and saves as PNG using GDAL."""
+    try:
+        # OLI Bands: 4=Red, 3=Green, 2=Blue
+        # Note: gdal_dataset.GetRasterBand is 1-indexed
+        red = gdal_ds.GetRasterBand(4).ReadAsArray().astype(np.float32)
+        green = gdal_ds.GetRasterBand(3).ReadAsArray().astype(np.float32)
+        blue = gdal_ds.GetRasterBand(2).ReadAsArray().astype(np.float32)
+        
+        rgb = np.stack([red, green, blue], axis=-1)
+        
+        # Simple normalization for display (2% - 98% stretch)
+        p2, p98 = np.percentile(rgb, (2, 98))
+        rgb = (rgb - p2) / (p98 - p2)
+        rgb = np.clip(rgb, 0, 1)
+        
+        plt.figure(figsize=(8, 8))
+        plt.imshow(rgb)
+        plt.axis('off')
+        plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
+        plt.close()
+        return True
+    except Exception as e:
+        print(f"Could not generate RGB preview: {e}")
+        return False
 # --- End of Helper Functions ---
 
 
-def main():
+def run_inference(input_path, output_dir):
     # --- 1. Setup ---
     gdal.UseExceptions()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -137,13 +166,17 @@ def main():
     # --- 2. Load Model ---
     print(f"Loading model from {MODEL_PATH}...")
     model = CSRN().to(device)
-    model.load_state_dict(torch.load(MODEL_PATH))
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
     print("Model loaded.")
 
     # --- 3. Load and Preprocess Full Scene ---
-    print(f"Loading sample file: {SAMPLE_TIF_PATH}")
-    gdal_ds = gdal.Open(SAMPLE_TIF_PATH)
+    print(f"Loading sample file: {input_path}")
+    gdal_ds = gdal.Open(input_path)
+    
+    # Generate RGB Preview first
+    input_preview_path = os.path.join(output_dir, "input_preview.png")
+    has_rgb = save_rgb_preview(gdal_ds, input_preview_path)
     
     oli_data = [get_band_data(gdal_ds, idx) for idx in OLI_BANDS_IDX]
     oli_30m = np.stack(oli_data, axis=0).astype(np.float32)
@@ -170,6 +203,14 @@ def main():
     epsilon_30m = epsilon_30m[:h_crop, :w_crop]
 
     lst_100m_input = lst_30m_target.reshape(h_lr_orig, 3, w_lr_orig, 3).mean(axis=(1, 3))
+    
+    # --- SAVE INTERMEDIATE PREPROCESSING FILES (.npy) ---
+    # This matches the user's request to "preprocess it into the desired files"
+    print("Saving intermediate preprocessing files...")
+    np.save(os.path.join(output_dir, "lst_100m_input.npy"), lst_100m_input)
+    np.save(os.path.join(output_dir, "oli_30m_guide.npy"), oli_30m)
+    np.save(os.path.join(output_dir, "eps_30m_guide.npy"), epsilon_30m)
+    np.save(os.path.join(output_dir, "lst_30m_target.npy"), lst_30m_target)
     
     # --- 5. Normalization and Tensor Conversion ---
     print("Normalizing data and preparing tensors...")
@@ -277,11 +318,48 @@ def main():
     print(f"SSIM: {ssim.item():.4f}")
 
     # --- 9. Save GeoTIFF Output ---
-    save_as_geotiff(pred_hr_np, gdal_ds, OUTPUT_IMAGE_PATH, (h_crop, w_crop))
+    output_image_path = os.path.join(output_dir, "inference_output_30m.tif")
+    save_as_geotiff(pred_hr_np, gdal_ds, output_image_path, (h_crop, w_crop))
     
+    # --- 9a. Save Web Previews (New) ---
+    output_preview_path = os.path.join(output_dir, "output_preview.png")
+    
+    # Upscale LR input for preview (Fallback if RGB generation failed)
+    if not has_rgb:
+        lr_input_upscaled = cv2.resize(
+            lr_input_np, 
+            (w_crop, h_crop), 
+            interpolation=cv2.INTER_NEAREST
+        )
+        # Determine vmin/vmax for consistent scaling
+        valid_temps = hr_target_np[hr_target_np > 150]
+        vmin = np.percentile(valid_temps, 5) 
+        vmax = np.percentile(valid_temps, 95)
+
+        # Save Input Preview (Upscaled LR)
+        plt.figure(figsize=(8, 8))
+        plt.imshow(lr_input_upscaled, cmap='hot', vmin=vmin, vmax=vmax)
+        plt.axis('off')
+        plt.savefig(input_preview_path, bbox_inches='tight', pad_inches=0)
+        plt.close()
+    else:
+        # If we have RGB, we still need vmin/vmax for the output thermal plot
+        valid_temps = hr_target_np[hr_target_np > 150]
+        vmin = np.percentile(valid_temps, 5) 
+        vmax = np.percentile(valid_temps, 95)
+    
+    # Save Output Preview (Prediction)
+    plt.figure(figsize=(8, 8))
+    plt.imshow(pred_hr_np, cmap='hot', vmin=vmin, vmax=vmax)
+    plt.axis('off')
+    plt.savefig(output_preview_path, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
     # --- 10. Save Comparison Plot ---
-    print(f"Saving comparison plot to {OUTPUT_PLOT_PATH}...")
+    output_plot_path = os.path.join(output_dir, "inference_comparison.png")
+    print(f"Saving comparison plot to {output_plot_path}...")
     
+    # Re-create lr_input_upscaled for the comparison plot if needed
     lr_input_upscaled = cv2.resize(
         lr_input_np, 
         (w_crop, h_crop), 
@@ -289,10 +367,6 @@ def main():
     )
     
     fig, axes = plt.subplots(1, 3, figsize=(24, 8), layout="constrained")
-    
-    valid_temps = hr_target_np[hr_target_np > 150]
-    vmin = np.percentile(valid_temps, 5) 
-    vmax = np.percentile(valid_temps, 95)
     
     axes[0].imshow(lr_input_upscaled, cmap='hot', vmin=vmin, vmax=vmax)
     axes[0].set_title(f"Input LST (100m, Nearest Neighbor)")
@@ -304,11 +378,26 @@ def main():
     axes[2].set_title(f"Ground Truth LST (30m)")
     
     fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.7, label="Temperature (K)")
-    fig.suptitle(f"Inference on Scene: {os.path.basename(os.path.dirname(SAMPLE_TIF_PATH))}", fontsize=16)
+    fig.suptitle(f"Inference on Scene: {os.path.basename(os.path.dirname(input_path))}", fontsize=16)
         
-    plt.savefig(OUTPUT_PLOT_PATH)
+    plt.savefig(output_plot_path)
     print("Plot saved.")
     print("\n--- Inference Complete ---")
+    
+    return {
+        "output_image": output_image_path,
+        "output_plot": output_plot_path,
+        "input_preview": input_preview_path,
+        "output_preview": output_preview_path,
+        "metrics": {
+            "rmse": float(rmse),
+            "psnr": float(psnr.item()),
+            "ssim": float(ssim.item())
+        }
+    }
+
+def main():
+    run_inference(SAMPLE_TIF_PATH, MODEL_DIR)
 
 if __name__ == "__main__":
     main()

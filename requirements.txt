@@ -17,3 +17,8 @@ pandas>=2.0.0
 # Computer Vision & Image Processing (For Geometric Alignment)
 scikit-image>=0.21.0
 opencv-python>=4.7.0
+
+# Web Application
+fastapi
+uvicorn
+python-multipart
