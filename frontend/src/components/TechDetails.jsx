@@ -1,69 +1,123 @@
-import React from 'react';
-import architectureDiagram from '../assets/architecture_diagram.png';
+import React, { useRef } from 'react';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const TechDetails = () => {
+    const containerRef = useRef(null);
+
+    useGSAP(() => {
+        const tl = gsap.timeline({
+            scrollTrigger: {
+                trigger: containerRef.current,
+                start: 'top 80%',
+                end: 'bottom 20%',
+                toggleActions: 'play none none reverse',
+            }
+        });
+
+        tl.from('.tech-item', {
+            x: -50,
+            opacity: 0,
+            duration: 0.8,
+            stagger: 0.1,
+            ease: 'power3.out',
+        })
+            .from('.tech-visual', {
+                x: 50,
+                opacity: 0,
+                duration: 1,
+                ease: 'power3.out',
+            }, '-=0.6');
+
+    }, { scope: containerRef });
+
     return (
-        <div id="tech-details" className="py-24 sm:py-32 relative overflow-hidden">
-            {/* Background Decoration */}
-            <div className="absolute right-0 top-1/4 w-1/2 h-1/2 bg-indigo-900/20 blur-[100px] rounded-full pointer-events-none"></div>
+        <div id="tech-details" ref={containerRef} className="py-24 relative overflow-hidden">
+            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 
-            <div className="mx-auto max-w-7xl px-6 lg:px-8 relative z-10">
-                <div className="mx-auto max-w-2xl lg:mx-0">
-                    <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Technical Architecture</h2>
-                    <p className="mt-6 text-lg leading-8 text-gray-300">
-                        The Cross-Scale Residual Network (CSRN) utilizes a deep learning approach to fuse multi-modal satellite data.
-                    </p>
-                </div>
+                    {/* Text Content */}
+                    <div>
+                        <h2 className="text-[#0ae448] font-mono text-sm tracking-wider mb-4 uppercase">Architecture</h2>
+                        <h3 className="text-4xl font-bold text-white mb-6">Cross-Scale Residual Network</h3>
+                        <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+                            The CSRN model utilizes a dual-branch architecture to extract high-frequency spatial details from 30m optical data and fuse them with 100m thermal data.
+                        </p>
 
-                <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-x-12 gap-y-16 lg:mx-0 lg:max-w-none lg:grid-cols-2 lg:items-center">
-                    <div className="lg:pr-4">
-                        <div className="lg:max-w-lg space-y-8">
-                            <div>
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/10 ring-1 ring-sky-500/20 text-sky-400 font-bold text-sm">1</span>
-                                    <h3 className="text-xl font-semibold text-white">The Model</h3>
-                                </div>
-                                <p className="text-gray-400 pl-11">
-                                    Our architecture employs residual learning to capture high-frequency details from optical bands and inject them into the thermal data.
-                                </p>
-                            </div>
+                        <ul className="space-y-6">
+                            {[
+                                { title: 'Deep Feature Extraction', desc: 'ResNet-50 backbone for optical feature mining.' },
+                                { title: 'Attention Mechanism', desc: 'Spatial and channel attention for adaptive fusion.' },
+                                { title: 'PixelShuffle Upsampling', desc: 'Sub-pixel convolution for artifact-free scaling.' }
+                            ].map((item, i) => (
+                                <li key={i} className="tech-item flex gap-4">
+                                    <div className="flex-none w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[#9d95ff] font-bold">
+                                        {i + 1}
+                                    </div>
+                                    <div>
+                                        <h4 className="text-white font-semibold text-lg">{item.title}</h4>
+                                        <p className="text-gray-500">{item.desc}</p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
 
-                            <div>
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/10 ring-1 ring-sky-500/20 text-sky-400 font-bold text-sm">2</span>
-                                    <h3 className="text-xl font-semibold text-white">Data Fusion</h3>
-                                </div>
-                                <p className="text-gray-400 pl-11">
-                                    Input: 7-band Landsat 8/9 OLI data (30m) + single-band TIRS thermal image (100m).
-                                    <br />
-                                    Output: Super-resolved Land Surface Temperature (30m).
-                                </p>
-                            </div>
+                    {/* Visual/Diagram */}
+                    <div className="tech-visual relative">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-[#0ae448]/20 to-[#9d95ff]/20 blur-3xl rounded-full opacity-30"></div>
+                        <div className="relative bg-white/5 border border-white/10 rounded-2xl p-8 shadow-2xl backdrop-blur-sm flex items-center justify-center">
+                            {/* Custom Architecture SVG */}
+                            <svg viewBox="0 0 800 400" className="w-full h-auto text-white" fill="none" stroke="currentColor" strokeWidth="2">
+                                {/* Input Nodes */}
+                                <g transform="translate(50, 100)">
+                                    <rect x="0" y="0" width="100" height="80" rx="8" className="fill-white/10 stroke-[#0ae448]" />
+                                    <text x="50" y="45" textAnchor="middle" className="fill-white text-xs font-mono" stroke="none">Optical (30m)</text>
+                                </g>
+                                <g transform="translate(50, 220)">
+                                    <rect x="0" y="0" width="100" height="80" rx="8" className="fill-white/10 stroke-[#9d95ff]" />
+                                    <text x="50" y="45" textAnchor="middle" className="fill-white text-xs font-mono" stroke="none">Thermal (100m)</text>
+                                </g>
 
-                            <div>
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/10 ring-1 ring-sky-500/20 text-sky-400 font-bold text-sm">3</span>
-                                    <h3 className="text-xl font-semibold text-white">Optimization</h3>
-                                </div>
-                                <p className="text-gray-400 pl-11">
-                                    Trained using a combination of L1 Loss and Perceptual Loss to ensure both pixel-wise accuracy and texture preservation.
-                                </p>
-                            </div>
+                                {/* Feature Extraction */}
+                                <g transform="translate(250, 160)">
+                                    <rect x="0" y="0" width="120" height="80" rx="8" className="fill-white/5 stroke-white/30" />
+                                    <text x="60" y="45" textAnchor="middle" className="fill-white text-xs font-bold" stroke="none">Feature Extraction</text>
+                                </g>
+
+                                {/* Fusion Block */}
+                                <g transform="translate(450, 160)">
+                                    <rect x="0" y="0" width="120" height="80" rx="8" className="fill-white/5 stroke-[#0ae448]" />
+                                    <text x="60" y="45" textAnchor="middle" className="fill-white text-xs font-bold" stroke="none">Cross-Scale Fusion</text>
+                                </g>
+
+                                {/* Output */}
+                                <g transform="translate(650, 160)">
+                                    <rect x="0" y="0" width="100" height="80" rx="8" className="fill-[#0ae448]/20 stroke-[#0ae448]" />
+                                    <text x="50" y="45" textAnchor="middle" className="fill-white text-xs font-bold" stroke="none">Super Res (30m)</text>
+                                </g>
+
+                                {/* Connections */}
+                                <path d="M150 140 L250 200" className="stroke-white/20" markerEnd="url(#arrow)" />
+                                <path d="M150 260 L250 200" className="stroke-white/20" markerEnd="url(#arrow)" />
+                                <path d="M370 200 L450 200" className="stroke-white/20" markerEnd="url(#arrow)" />
+                                <path d="M570 200 L650 200" className="stroke-[#0ae448]" markerEnd="url(#arrow-green)" />
+
+                                <defs>
+                                    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                                        <path d="M0,0 L0,6 L9,3 z" className="fill-white/20" stroke="none" />
+                                    </marker>
+                                    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                                        <path d="M0,0 L0,6 L9,3 z" className="fill-[#0ae448]" stroke="none" />
+                                    </marker>
+                                </defs>
+                            </svg>
                         </div>
                     </div>
 
-                    <div className="glass rounded-2xl p-2 ring-1 ring-white/10">
-                        <div className="aspect-[16/9] bg-slate-900/50 rounded-xl overflow-hidden relative flex items-center justify-center group">
-                            <img
-                                src={architectureDiagram}
-                                alt="CSRN Architecture Diagram"
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
-                                <span className="text-white font-medium">CSRN Architecture Overview</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

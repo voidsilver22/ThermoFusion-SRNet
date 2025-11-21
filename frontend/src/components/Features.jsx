@@ -7,87 +7,106 @@ gsap.registerPlugin(ScrollTrigger);
 
 const features = [
     {
-        name: 'Super Resolution',
-        description: 'Upscales 100m thermal bands to 30m resolution, matching optical bands perfectly.',
+        title: 'Super Resolution',
+        description: 'Upscale 100m thermal bands to 30m with preservation of radiometric integrity.',
         icon: (
-            <svg width="24" height="24" className="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            <svg className="w-8 h-8 text-[#0ae448]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
             </svg>
         ),
     },
     {
-        name: 'Multi-Modal Fusion',
-        description: 'Integrates Optical (OLI) and Thermal (TIRS) data for enhanced detail recovery.',
+        title: 'Cross-Scale Fusion',
+        description: 'Intelligent merging of Landsat OLI (30m) features with TIRS thermal data.',
         icon: (
-            <svg width="24" height="24" className="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" />
+            <svg className="w-8 h-8 text-[#9d95ff]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
         ),
     },
     {
-        name: 'Physics-Aware',
-        description: 'Maintains physical consistency of Land Surface Temperature (LST) values.',
+        title: 'Real-Time Processing',
+        description: 'Optimized inference pipeline delivering results in seconds per scene.',
         icon: (
-            <svg width="24" height="24" className="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
+            <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
         ),
     },
 ];
 
 const Features = () => {
-    const containerRef = useRef(null);
-    const cardsRef = useRef([]);
+    const sectionRef = useRef(null);
+    const triggerRef = useRef(null);
 
     useGSAP(() => {
-        cardsRef.current.forEach((card, index) => {
-            gsap.from(card, {
+        const pin = gsap.fromTo(
+            sectionRef.current,
+            { translateX: 0 },
+            {
+                translateX: '-200vw',
+                ease: 'none',
+                duration: 1,
                 scrollTrigger: {
-                    trigger: card,
-                    start: 'top 85%',
-                    toggleActions: 'play none none reverse',
+                    trigger: triggerRef.current,
+                    start: 'top top',
+                    end: '2000 top',
+                    scrub: 0.6,
+                    pin: true,
                 },
-                y: 50,
-                opacity: 0,
-                duration: 0.8,
-                delay: index * 0.2,
-                ease: 'power2.out',
-            });
-        });
-    }, { scope: containerRef });
+            }
+        );
+        return () => {
+            pin.kill();
+        };
+    }, { scope: triggerRef });
 
     return (
-        <div ref={containerRef} className="py-24 sm:py-32 relative bg-slate-50 dark:bg-[#0f172a] transition-colors duration-300">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
-                <div className="mx-auto max-w-2xl lg:text-center mb-16">
-                    <h2 className="text-base font-semibold leading-7 text-sky-500 dark:text-sky-400 tracking-wide uppercase">Capabilities</h2>
-                    <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-                        Precision Thermal Mapping
-                    </p>
-                    <p className="mt-6 text-lg leading-8 text-slate-600 dark:text-gray-400">
-                        Our model leverages advanced convolutional neural networks to bridge the resolution gap between thermal and optical satellite imagery.
-                    </p>
+        <div ref={triggerRef} className="overflow-hidden">
+            <div ref={sectionRef} className="h-screen w-[300vw] flex flex-row relative">
+
+                {/* Intro Section */}
+                <div className="w-screen h-full flex items-center justify-center px-12 border-r border-white/5">
+                    <div className="max-w-2xl">
+                        <h2 className="text-[#0ae448] font-mono text-sm tracking-wider mb-4 uppercase">Capabilities</h2>
+                        <p className="text-5xl md:text-7xl font-bold text-white mb-8 leading-tight">
+                            Beyond <br />
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0ae448] to-[#9d95ff]">
+                                Physical Limits.
+                            </span>
+                        </p>
+                        <p className="text-xl text-gray-400 max-w-lg">
+                            Our CSRN architecture hallucinates plausible high-frequency details by learning from the optical spectrum.
+                        </p>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                    {features.map((feature, index) => (
-                        <div
-                            key={feature.name}
-                            ref={el => cardsRef.current[index] = el}
-                            className="glass-card rounded-2xl p-8 hover:bg-white/80 dark:hover:bg-white/5 transition-colors duration-300 group"
-                        >
-                            <div className="h-12 w-12 flex items-center justify-center rounded-xl bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors mb-6">
-                                {feature.icon}
+                {/* Feature Cards */}
+                {features.map((feature, index) => (
+                    <div key={index} className="w-screen h-full flex items-center justify-center px-4 border-r border-white/5 bg-transparent">
+                        <div className="group relative w-full max-w-md aspect-[4/5] bg-white/5 rounded-3xl p-10 border border-white/10 hover:border-[#0ae448]/50 transition-colors duration-500 flex flex-col justify-between overflow-hidden">
+
+                            {/* Hover Gradient */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-[#0ae448]/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                            <div className="relative z-10">
+                                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform duration-300">
+                                    {feature.icon}
+                                </div>
+                                <h3 className="text-3xl font-bold text-white mb-4">{feature.title}</h3>
+                                <p className="text-gray-400 text-lg leading-relaxed">{feature.description}</p>
                             </div>
-                            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-3">
-                                {feature.name}
-                            </h3>
-                            <p className="text-slate-600 dark:text-gray-400 leading-relaxed">
-                                {feature.description}
-                            </p>
+
+                            <div className="relative z-10 flex items-center gap-2 text-[#0ae448] font-medium opacity-0 transform translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                                <span>Learn more</span>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                </svg>
+                            </div>
                         </div>
-                    ))}
-                </div>
+                    </div>
+                ))}
+
             </div>
         </div>
     );
